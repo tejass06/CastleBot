@@ -1,47 +1,186 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
 
 module.exports = {
     name: 'help',
     description: 'Lists all available commands or info about a specific command.',
-    aliases: ['commands'],
-    execute(message, args, client) {
-        // The prefix is fetched from your .env file
+    aliases: ['commands', 'h'],
+    async execute(message, args, client) {
         const prefix = process.env.PREFIX;
 
-        // If no arguments are provided (i.e., just '!help')
+        // If no arguments are provided, show modern dropdown menu
         if (!args.length) {
-            const helpEmbed = new EmbedBuilder()
-                .setColor('#0099ff')
-                .setTitle(' <a:Moderation:1381564322278281246> Bot Commands')
-                .setDescription(`Here is a list of all available commands.\nFor more details on a specific command, type \`${prefix}help [command name]\`.`);
+            // Category emojis
+            const categoryEmojis = {
+                admin: '👑',
+                mod: '🛡️',
+                utility: '🔧',
+                stats: '📊',
+                voice: '🎙️',
+                fun: '🎮'
+            };
 
-            // Read the sub-folders in the 'commands' directory
+            // Read command folders
             const commandFolders = fs.readdirSync('./commands');
+            
+            // Build command data
+            const categories = {};
+            let totalCommands = 0;
 
             for (const folder of commandFolders) {
-                // Get all the command files in the sub-folder
                 const commandFiles = fs.readdirSync(`./commands/${folder}`).filter(file => file.endsWith('.js'));
-                
-                // Map the command files to a string with their name and description
-                const commandList = commandFiles
-                    .map(file => {
-                        const command = require(`../${folder}/${file}`);
-                        return `\`${command.name}\``; // Just show the command name
-                    })
-                    .join(', '); // Join with a comma and space
-
-                if (commandList) {
-                    // Add a field to the embed for each category
-                    helpEmbed.addFields({
-                        // Capitalize the folder name for the field title
-                        name: `**${folder.charAt(0).toUpperCase() + folder.slice(1)}**`,
-                        value: commandList,
-                    });
-                }
+                categories[folder] = commandFiles.map(file => {
+                    const command = require(`../${folder}/${file}`);
+                    totalCommands++;
+                    return command;
+                });
             }
 
-            return message.channel.send({ embeds: [helpEmbed] });
+            // Create main embed
+            const mainEmbed = new EmbedBuilder()
+                .setColor('#5865F2')
+                .setAuthor({ 
+                    name: `${client.user.username} Help Menu`,
+                    iconURL: client.user.displayAvatarURL()
+                })
+                .setTitle('🏰 Welcome to CastleBot!')
+                .setDescription(
+                    `**Your all-in-one moderation & utility bot!**\n\n` +
+                    `📝 **Total Commands:** ${totalCommands}\n` +
+                    `⚙️ **Prefix:** \`${prefix}\`\n` +
+                    `🌐 **Multi-Language Support:** 20+ languages!\n\n` +
+                    `**Select a category from the menu below to view commands.**`
+                )
+                .addFields(
+                    { 
+                        name: '📚 Quick Links', 
+                        value: `• Type \`${prefix}help <command>\` for details\n• Use dropdown menu to browse categories\n• Commands marked with 🔒 need permissions`,
+                        inline: false 
+                    }
+                )
+                .setFooter({ 
+                    text: `Requested by ${message.author.tag}`,
+                    iconURL: message.author.displayAvatarURL()
+                })
+                .setTimestamp();
+
+            // Create dropdown menu options
+            const selectMenuOptions = commandFolders.map(folder => ({
+                label: folder.charAt(0).toUpperCase() + folder.slice(1),
+                description: `View all ${folder} commands`,
+                value: folder,
+                emoji: categoryEmojis[folder] || '📁'
+            }));
+
+            // Add "Home" option
+            selectMenuOptions.unshift({
+                label: 'Home',
+                description: 'Return to main help menu',
+                value: 'home',
+                emoji: '🏠'
+            });
+
+            // Create select menu
+            const selectMenu = new StringSelectMenuBuilder()
+                .setCustomId('help_menu')
+                .setPlaceholder('📂 Select a command category')
+                .addOptions(selectMenuOptions);
+
+            // Create button row
+            const buttons = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setLabel('Support Server')
+                        .setStyle(ButtonStyle.Link)
+                        .setURL('https://discord.gg/yourserver')
+                        .setEmoji('💬'),
+                    new ButtonBuilder()
+                        .setLabel('Invite Bot')
+                        .setStyle(ButtonStyle.Link)
+                        .setURL('https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID')
+                        .setEmoji('➕'),
+                    new ButtonBuilder()
+                        .setCustomId('delete_help')
+                        .setLabel('Delete')
+                        .setStyle(ButtonStyle.Danger)
+                        .setEmoji('🗑️')
+                );
+
+            const row = new ActionRowBuilder().addComponents(selectMenu);
+
+            // Send the message
+            const helpMessage = await message.channel.send({
+                embeds: [mainEmbed],
+                components: [row, buttons]
+            });
+
+            // Create collector for interactions
+            const collector = helpMessage.createMessageComponentCollector({
+                filter: (i) => i.user.id === message.author.id,
+                time: 300000 // 5 minutes
+            });
+
+            collector.on('collect', async (interaction) => {
+                if (interaction.customId === 'delete_help') {
+                    await helpMessage.delete();
+                    return;
+                }
+
+                if (interaction.customId === 'help_menu') {
+                    const selected = interaction.values[0];
+
+                    if (selected === 'home') {
+                        await interaction.update({ embeds: [mainEmbed], components: [row, buttons] });
+                        return;
+                    }
+
+                    // Create category embed
+                    const categoryCommands = categories[selected];
+                    const categoryEmbed = new EmbedBuilder()
+                        .setColor('#5865F2')
+                        .setAuthor({ 
+                            name: `${client.user.username} Help Menu`,
+                            iconURL: client.user.displayAvatarURL()
+                        })
+                        .setTitle(`${categoryEmojis[selected] || '📁'} ${selected.charAt(0).toUpperCase() + selected.slice(1)} Commands`)
+                        .setDescription(`**${categoryCommands.length} command(s) in this category**\n\nUse \`${prefix}help <command>\` for detailed information.`)
+                        .setFooter({ 
+                            text: `Requested by ${message.author.tag}`,
+                            iconURL: message.author.displayAvatarURL()
+                        })
+                        .setTimestamp();
+
+                    // Add commands to embed
+                    categoryCommands.forEach(cmd => {
+                        const aliases = cmd.aliases ? `(${cmd.aliases.join(', ')})` : '';
+                        categoryEmbed.addFields({
+                            name: `${prefix}${cmd.name} ${aliases}`,
+                            value: cmd.description || 'No description available.',
+                            inline: false
+                        });
+                    });
+
+                    await interaction.update({ embeds: [categoryEmbed], components: [row, buttons] });
+                }
+            });
+
+            collector.on('end', () => {
+                // Disable components after timeout
+                const disabledRow = new ActionRowBuilder()
+                    .addComponents(
+                        StringSelectMenuBuilder.from(selectMenu).setDisabled(true)
+                    );
+                const disabledButtons = new ActionRowBuilder()
+                    .addComponents(
+                        buttons.components.map(btn => 
+                            btn.data.style === ButtonStyle.Link ? btn : ButtonBuilder.from(btn).setDisabled(true)
+                        )
+                    );
+                
+                helpMessage.edit({ components: [disabledRow, disabledButtons] }).catch(() => {});
+            });
+
+            return;
         }
 
         // If a specific command is asked for (e.g., '!help kick')
