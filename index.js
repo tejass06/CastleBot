@@ -1,6 +1,7 @@
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const fs = require('fs');
 const mongoose = require('mongoose');
+const http = require('http');
 require('dotenv').config();
 
 // Validate environment variables
@@ -16,6 +17,31 @@ if (!process.env.MONGO_URI) {
     console.error('❌ ERROR: MONGO_URI is not defined in .env file');
     process.exit(1);
 }
+
+// HTTP server for Azure health checks
+const PORT = process.env.PORT || 8080;
+const server = http.createServer((req, res) => {
+    if (req.url === '/health' || req.url === '/') {
+        const status = {
+            status: 'ok',
+            bot: client.user ? 'online' : 'connecting',
+            uptime: process.uptime(),
+            timestamp: new Date().toISOString(),
+            guilds: client.guilds.cache.size,
+            users: client.users.cache.size
+        };
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(status, null, 2));
+    } else {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not Found');
+    }
+});
+
+server.listen(PORT, () => {
+    console.log(`🌐 HTTP server listening on port ${PORT} for Azure health checks`);
+});
+
 
 const client = new Client({
     intents: [
@@ -120,6 +146,7 @@ mongoose.connect(process.env.MONGO_URI)
 // Graceful shutdown
 process.on('SIGINT', async () => {
     console.log('\n🛑 Shutting down gracefully...');
+    server.close(() => console.log('🌐 HTTP server closed'));
     await mongoose.connection.close();
     client.destroy();
     console.log('✅ Bot shut down successfully');
@@ -128,6 +155,7 @@ process.on('SIGINT', async () => {
 
 process.on('SIGTERM', async () => {
     console.log('\n🛑 SIGTERM received, shutting down gracefully...');
+    server.close(() => console.log('🌐 HTTP server closed'));
     await mongoose.connection.close();
     client.destroy();
     console.log('✅ Bot shut down successfully');

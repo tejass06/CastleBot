@@ -1,5 +1,11 @@
 # CastleBot - Production Deployment Guide
 
+## Quick Links
+
+- **Local/VPS Deployment**: See below
+- **Azure App Service**: See [AZURE_DEPLOYMENT.md](./AZURE_DEPLOYMENT.md)
+- **Docker Deployment**: See Docker section below
+
 ## Prerequisites
 
 1. **Node.js**: Version 20.x or higher
