@@ -6,19 +6,34 @@ require('dotenv').config();
 
 // Validate environment variables
 if (!process.env.TOKEN) {
-    console.error('❌ ERROR: TOKEN is not defined in .env file');
+    console.error('❌ ERROR: TOKEN environment variable is not set');
+    console.error('Please set TOKEN in Azure App Service Configuration');
     process.exit(1);
 }
 if (!process.env.PREFIX) {
-    console.error('❌ ERROR: PREFIX is not defined in .env file');
+    console.error('❌ ERROR: PREFIX environment variable is not set');
+    console.error('Please set PREFIX in Azure App Service Configuration');
     process.exit(1);
 }
 if (!process.env.MONGO_URI) {
-    console.error('❌ ERROR: MONGO_URI is not defined in .env file');
+    console.error('❌ ERROR: MONGO_URI environment variable is not set');
+    console.error('Please set MONGO_URI in Azure App Service Configuration');
     process.exit(1);
 }
 
-// HTTP server for Azure health checks
+console.log('✅ Environment variables validated');
+
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent, // Essential for reading message content
+        GatewayIntentBits.GuildVoiceStates, // Required for voice channel detection
+    ],
+});
+
+// HTTP server for Azure health checks (created AFTER client)
 const PORT = process.env.PORT || 8080;
 const server = http.createServer((req, res) => {
     if (req.url === '/health' || req.url === '/') {
@@ -40,17 +55,6 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
     console.log(`🌐 HTTP server listening on port ${PORT} for Azure health checks`);
-});
-
-
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent, // Essential for reading message content
-        GatewayIntentBits.GuildVoiceStates, // Required for voice channel detection
-    ],
 });
 
 // Lavalink (optional)
