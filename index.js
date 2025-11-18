@@ -4,6 +4,21 @@ const mongoose = require('mongoose');
 const http = require('http');
 require('dotenv').config();
 
+// Ensure FFmpeg is available (for @discordjs/voice / prism-media)
+try {
+    const ffmpegPath = require('ffmpeg-static');
+    if (ffmpegPath) {
+        // prism-media respects FFMPEG_PATH when searching for the binary
+        process.env.FFMPEG_PATH = ffmpegPath;
+        // Also prepend directory to PATH for good measure
+        const ffmpegDir = require('path').dirname(ffmpegPath);
+        process.env.PATH = `${ffmpegDir}:${process.env.PATH || ''}`;
+        console.log('🎵 FFmpeg configured via ffmpeg-static');
+    }
+} catch (e) {
+    console.warn('⚠️  ffmpeg-static not found. Voice features requiring FFmpeg may fail.');
+}
+
 // Validate environment variables
 if (!process.env.TOKEN) {
     console.error('❌ ERROR: TOKEN environment variable is not set');
