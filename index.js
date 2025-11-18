@@ -5,19 +5,38 @@ const http = require('http');
 require('dotenv').config();
 
 // Ensure FFmpeg is available (for @discordjs/voice / prism-media)
-try {
-    const ffmpegPath = require('ffmpeg-static');
-    if (ffmpegPath) {
-        // prism-media respects FFMPEG_PATH when searching for the binary
-        process.env.FFMPEG_PATH = ffmpegPath;
-        // Also prepend directory to PATH for good measure
-        const ffmpegDir = require('path').dirname(ffmpegPath);
-        process.env.PATH = `${ffmpegDir}:${process.env.PATH || ''}`;
-        console.log('🎵 FFmpeg configured via ffmpeg-static');
+(() => {
+    const path = require('path');
+    let configured = false;
+    // 1) Try ffmpeg-static
+    try {
+        const staticPath = require('ffmpeg-static');
+        if (staticPath) {
+            process.env.FFMPEG_PATH = staticPath;
+            process.env.PATH = `${path.dirname(staticPath)}:${process.env.PATH || ''}`;
+            console.log('🎵 FFmpeg configured via ffmpeg-static');
+            configured = true;
+        }
+    } catch {}
+
+    // 2) Fallback to @ffmpeg-installer/ffmpeg
+    if (!configured) {
+        try {
+            const ff = require('@ffmpeg-installer/ffmpeg');
+            if (ff && ff.path) {
+                process.env.FFMPEG_PATH = ff.path;
+                process.env.PATH = `${path.dirname(ff.path)}:${process.env.PATH || ''}`;
+                console.log('🎵 FFmpeg configured via @ffmpeg-installer/ffmpeg');
+                configured = true;
+            }
+        } catch {}
     }
-} catch (e) {
-    console.warn('⚠️  ffmpeg-static not found. Voice features requiring FFmpeg may fail.');
-}
+
+    // 3) Last resort: leave detection to system PATH
+    if (!configured) {
+        console.warn('⚠️  No bundled FFmpeg found. Expect voice features to require system ffmpeg in PATH.');
+    }
+})();
 
 // Validate environment variables
 if (!process.env.TOKEN) {
