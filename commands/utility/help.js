@@ -13,27 +13,35 @@ module.exports = {
             // Category emojis
             const categoryEmojis = {
                 admin: '👑',
-                mod: '🛡️',
+                mod:   '🛡️',
                 utility: '🔧',
                 stats: '📊',
-                voice: '🎙️',
-                fun: '🎮'
+                voice: '🎙️', 
+                fun:   '🎮'
             };
 
             // Read command folders
             const commandFolders = fs.readdirSync('./commands');
             
-            // Build command data
+            // Build command data (filter out removed/disabled commands)
             const categories = {};
             let totalCommands = 0;
 
             for (const folder of commandFolders) {
                 const commandFiles = fs.readdirSync(`./commands/${folder}`).filter(file => file.endsWith('.js'));
-                categories[folder] = commandFiles.map(file => {
-                    const command = require(`../${folder}/${file}`);
-                    totalCommands++;
-                    return command;
-                });
+                const list = [];
+                for (const file of commandFiles) {
+                    try {
+                        const command = require(`../${folder}/${file}`);
+                        if (!command || command.removed === true || !command.name) continue;
+                        list.push(command);
+                        totalCommands++;
+                    } catch (err) {
+                        // Skip broken command files gracefully
+                        console.warn(`⚠️  Failed to load command ${folder}/${file}:`, err.message);
+                    }
+                }
+                categories[folder] = list;
             }
 
             // Create main embed
@@ -135,7 +143,7 @@ module.exports = {
                     }
 
                     // Create category embed
-                    const categoryCommands = categories[selected];
+                    const categoryCommands = categories[selected] || [];
                     const categoryEmbed = new EmbedBuilder()
                         .setColor('#5865F2')
                         .setAuthor({ 

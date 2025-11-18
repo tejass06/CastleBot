@@ -1,24 +1,31 @@
-const googleTTS = require('google-tts-api');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config();
 
 /**
- * Text-to-Speech Utility with Indian Female Voice
- * Supports multiple Indian languages with female voice accent
+ * Text-to-Speech Utility powered by ElevenLabs
+ * Default voice can be configured via ELEVENLABS_VOICE_ID
  */
 
-// Voice configurations for different languages
+// ElevenLabs configuration
+const ELEVEN_API_KEY = process.env.ELEVENLABS_API_KEY;
+// Default to the provided voice id if not configured via env
+const ELEVEN_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'hGb0Exk8cp4vQEnwolxa';
+const ELEVEN_MODEL_ID = process.env.ELEVENLABS_MODEL_ID || 'eleven_multilingual_v2';
+const ELEVEN_OUTPUT = process.env.ELEVENLABS_OUTPUT || 'mp3_44100_128';
+
+// Backwards-compatible list for UI/help. These map to the same ElevenLabs voice.
 const VOICE_CONFIGS = {
-    'en': { lang: 'en-IN', voice: 'hi-IN', name: 'Indian English (Female)' },  // Indian English accent
-    'hi': { lang: 'hi-IN', voice: 'hi-IN', name: 'Hindi (Female)' },
-    'ta': { lang: 'ta-IN', voice: 'ta-IN', name: 'Tamil (Female)' },
-    'te': { lang: 'te-IN', voice: 'te-IN', name: 'Telugu (Female)' },
-    'bn': { lang: 'bn-IN', voice: 'bn-IN', name: 'Bengali (Female)' },
-    'mr': { lang: 'mr-IN', voice: 'mr-IN', name: 'Marathi (Female)' },
-    'gu': { lang: 'gu-IN', voice: 'gu-IN', name: 'Gujarati (Female)' },
-    'kn': { lang: 'kn-IN', voice: 'kn-IN', name: 'Kannada (Female)' },
-    'ml': { lang: 'ml-IN', voice: 'ml-IN', name: 'Malayalam (Female)' },
+    'en': { code: 'en', name: 'ElevenLabs Voice (English/IN)' },
+    'hi': { code: 'hi', name: 'ElevenLabs Voice (Hindi)' },
+    'ta': { code: 'ta', name: 'ElevenLabs Voice (Tamil)' },
+    'te': { code: 'te', name: 'ElevenLabs Voice (Telugu)' },
+    'bn': { code: 'bn', name: 'ElevenLabs Voice (Bengali)' },
+    'mr': { code: 'mr', name: 'ElevenLabs Voice (Marathi)' },
+    'gu': { code: 'gu', name: 'ElevenLabs Voice (Gujarati)' },
+    'kn': { code: 'kn', name: 'ElevenLabs Voice (Kannada)' },
+    'ml': { code: 'ml', name: 'ElevenLabs Voice (Malayalam)' },
 };
 
 /**
@@ -28,33 +35,18 @@ const VOICE_CONFIGS = {
  * @param {boolean} slow - Slow speed (default: false)
  * @returns {Promise<Object>} Audio URL and info
  */
-async function generateTTS(text, lang = 'en', slow = false) {
-    try {
-        // Get voice config or default to Indian English
-        const voiceConfig = VOICE_CONFIGS[lang] || VOICE_CONFIGS['en'];
-        
-        // Generate TTS URL using Google TTS
-        const audioUrl = googleTTS.getAudioUrl(text, {
-            lang: voiceConfig.lang,
-            slow: slow,
-            host: 'https://translate.google.com',
-        });
-
-        return {
-            success: true,
-            url: audioUrl,
-            text: text,
-            language: lang,
-            voiceName: voiceConfig.name,
-            duration: estimateDuration(text)
-        };
-    } catch (error) {
-        console.error('TTS generation error:', error);
-        return {
-            success: false,
-            error: error.message || 'Failed to generate speech'
-        };
-    }
+async function generateTTS(text, lang = 'en') {
+    // Keep for compatibility: generate a file then return metadata
+    const result = await downloadTTS(text, lang);
+    if (!result.success) return result;
+    return {
+        success: true,
+        filePath: result.filePath,
+        text,
+        language: lang,
+        voiceName: result.voiceName,
+        duration: estimateDuration(text)
+    };
 }
 
 /**
@@ -65,16 +57,10 @@ async function generateTTS(text, lang = 'en', slow = false) {
  * @returns {Promise<Object>} Result with file path
  */
 async function downloadTTS(text, lang = 'en', outputPath = null) {
+    if (!ELEVEN_API_KEY) {
+        return { success: false, error: 'ELEVENLABS_API_KEY is not set in environment' };
+    }
     try {
-        const voiceConfig = VOICE_CONFIGS[lang] || VOICE_CONFIGS['en'];
-        
-        // Generate audio URL
-        const audioUrl = googleTTS.getAudioUrl(text, {
-            lang: voiceConfig.lang,
-            slow: false,
-            host: 'https://translate.google.com',
-        });
-
         // Create temp directory if it doesn't exist
         const tempDir = path.join(__dirname, '../temp');
         if (!fs.existsSync(tempDir)) {
@@ -87,34 +73,46 @@ async function downloadTTS(text, lang = 'en', outputPath = null) {
             outputPath = path.join(tempDir, `tts_${timestamp}.mp3`);
         }
 
-        // Download audio
+        const url = `https://api.elevenlabs.io/v1/text-to-speech/${ELEVEN_VOICE_ID}?output_format=${encodeURIComponent(ELEVEN_OUTPUT)}`;
         const response = await axios({
-            method: 'get',
-            url: audioUrl,
-            responseType: 'stream'
+            method: 'post',
+            url,
+            headers: {
+                'xi-api-key': ELEVEN_API_KEY,
+                'Content-Type': 'application/json'
+            },
+            data: {
+                text,
+                model_id: ELEVEN_MODEL_ID,
+                // Optional: tweak voice settings via env
+                voice_settings: process.env.ELEVENLABS_SETTINGS
+                    ? JSON.parse(process.env.ELEVENLABS_SETTINGS)
+                    : { stability: 0.5, similarity_boost: 0.8 }
+            },
+            responseType: 'stream',
+            timeout: 20000
         });
 
-        // Save to file
-        const writer = fs.createWriteStream(outputPath);
-        response.data.pipe(writer);
-
-        return new Promise((resolve, reject) => {
-            writer.on('finish', () => {
-                resolve({
-                    success: true,
-                    filePath: outputPath,
-                    text: text,
-                    language: lang,
-                    voiceName: voiceConfig.name
-                });
-            });
+        await new Promise((resolve, reject) => {
+            const writer = fs.createWriteStream(outputPath);
+            response.data.pipe(writer);
+            writer.on('finish', resolve);
             writer.on('error', reject);
         });
+
+        const voiceConfig = VOICE_CONFIGS[lang] || VOICE_CONFIGS['en'];
+        return {
+            success: true,
+            filePath: outputPath,
+            text,
+            language: lang,
+            voiceName: `${voiceConfig.name}`
+        };
     } catch (error) {
-        console.error('TTS download error:', error);
+        console.error('TTS download error (ElevenLabs):', error.response?.data || error.message);
         return {
             success: false,
-            error: error.message || 'Failed to download speech'
+            error: error.response?.data?.message || error.message || 'Failed to download speech'
         };
     }
 }

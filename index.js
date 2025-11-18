@@ -27,6 +27,9 @@ const client = new Client({
     ],
 });
 
+// Lavalink (optional)
+client.lavalink = null;
+
 // Command Handler
 client.commands = new Collection();
 let totalCommands = 0;
@@ -54,6 +57,9 @@ try {
     console.error('❌ Error loading commands:', error);
     process.exit(1);
 }
+
+// Music features removed: do not initialize Lavalink
+client.lavalink = null;
 
 // Event Handler (for the 'ready' event)
 client.once('ready', () => {
