@@ -5,7 +5,8 @@ const {
     createAudioResource, 
     AudioPlayerStatus,
     VoiceConnectionStatus,
-    entersState
+    entersState,
+    StreamType
 } = require('@discordjs/voice');
 const { downloadTTS, getAvailableVoices, isLanguageSupported } = require('../../utils/tts');
 const fs = require('fs');
@@ -183,7 +184,37 @@ module.exports = {
 
             // Create audio player
             const player = createAudioPlayer();
-            const resource = createAudioResource(result.filePath);
+
+            // Try to create resource; if FFmpeg is missing, fall back to OGG Opus
+            let resource;
+            try {
+                resource = createAudioResource(result.filePath);
+            } catch (err) {
+                if (String(err?.message || err).includes('FFmpeg/avconv not found')) {
+                    try {
+                        await generatingMsg.edit({
+                            embeds: [new EmbedBuilder()
+                                .setColor('#ffc107')
+                                .setTitle('🎙️ Preparing Fallback...')
+                                .setDescription('FFmpeg not found on server. Trying OGG/Opus fallback...')
+                            ]
+                        });
+
+                        // Clean up original file
+                        try { if (fs.existsSync(result.filePath)) fs.unlinkSync(result.filePath); } catch {}
+
+                        const fallback = await downloadTTS(text, language, null, { outputFormat: 'ogg_44100_64' });
+                        if (!fallback.success) {
+                            throw new Error(`Fallback failed: ${fallback.error}`);
+                        }
+                        resource = createAudioResource(fallback.filePath, { inputType: StreamType.OggOpus });
+                    } catch (fallbackErr) {
+                        throw fallbackErr;
+                    }
+                } else {
+                    throw err;
+                }
+            }
 
             // Play audio
             player.play(resource);

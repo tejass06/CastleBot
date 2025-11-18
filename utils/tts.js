@@ -54,9 +54,11 @@ async function generateTTS(text, lang = 'en') {
  * @param {string} text - Text to convert
  * @param {string} lang - Language code
  * @param {string} outputPath - File path to save
+ * @param {object} [opts] - Optional settings
+ * @param {string} [opts.outputFormat] - Override ElevenLabs output_format (e.g., 'ogg_44100_64')
  * @returns {Promise<Object>} Result with file path
  */
-async function downloadTTS(text, lang = 'en', outputPath = null) {
+async function downloadTTS(text, lang = 'en', outputPath = null, opts = {}) {
     if (!ELEVEN_API_KEY) {
         return { success: false, error: 'ELEVENLABS_API_KEY is not set in environment' };
     }
@@ -73,7 +75,8 @@ async function downloadTTS(text, lang = 'en', outputPath = null) {
             outputPath = path.join(tempDir, `tts_${timestamp}.mp3`);
         }
 
-        const url = `https://api.elevenlabs.io/v1/text-to-speech/${ELEVEN_VOICE_ID}?output_format=${encodeURIComponent(ELEVEN_OUTPUT)}`;
+    const outputFormat = opts.outputFormat || ELEVEN_OUTPUT;
+    const url = `https://api.elevenlabs.io/v1/text-to-speech/${ELEVEN_VOICE_ID}?output_format=${encodeURIComponent(outputFormat)}`;
         const response = await axios({
             method: 'post',
             url,
